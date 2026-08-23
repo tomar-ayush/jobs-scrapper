@@ -2,8 +2,9 @@ name: Job Scanner
 
 on:
   schedule:
-    # Run every 6 hours
-    - cron: '0 */6 * * *'
+    # Run every day at (10:30 AM IST) and (6:00 PM IST)
+    - cron: '0 5 * * *'
+    - cron: '30 12 * * *'
   workflow_dispatch: # Allow manual trigger
 
 jobs:
