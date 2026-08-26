@@ -127,9 +127,9 @@ def send_email(jobs: list[dict]) -> bool:
 
     # Build email
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"🎯 {{len(top_jobs)}} Job Matches Found — {{datetime.now(timezone.utc).strftime('%b %d, %H:%M UTC')}}"
+    msg["Subject"] = f" Daily Job Digest ({len(top_jobs)} matches)"
     msg["From"] = SMTP_EMAIL
-    msg["To"] = NOTIFY_EMAIL or SMTP_EMAIL
+    msg["To"] = NOTIFY_EMAIL
 
     # Plain text fallback
     plain = "Top job matches:\\n\\n"
