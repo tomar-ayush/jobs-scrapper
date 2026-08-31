@@ -51,9 +51,11 @@ FALLBACK_MODELS = [
 
 SMTP_EMAIL = os.getenv("SMTP_EMAIL", "")  # your Gmail address
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")  # Gmail App Password
-NOTIFY_EMAIL = os.getenv(
-    "NOTIFY_EMAIL", ""
-)  # recipient (can be same as SMTP_EMAIL)
+NOTIFY_EMAILS: list[str] = [
+    addr.strip()
+    for addr in os.getenv("NOTIFY_EMAIL", "").split(",")
+    if addr.strip()
+]
 SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = 587
 
@@ -79,6 +81,11 @@ def validate():
     if missing:
         raise ValueError(
             f"Missing required environment variables: {', '.join(missing)}"
+        )
+
+    if not NOTIFY_EMAILS:
+        raise ValueError(
+            "NOTIFY_EMAIL must contain at least one email address."
         )
 
     if not RESUME_TEXT_PATH.exists():

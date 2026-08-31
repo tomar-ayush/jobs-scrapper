@@ -14,7 +14,7 @@ from config import (
     SMTP_PASSWORD,
     SMTP_HOST,
     SMTP_PORT,
-    NOTIFY_EMAIL,
+    NOTIFY_EMAILS,
     MAX_JOBS_IN_EMAIL,
 )
 
@@ -122,6 +122,10 @@ def send_email(jobs: list[dict]) -> bool:
         logger.info("No jobs to notify about. Skipping email.")
         return False
 
+    if not NOTIFY_EMAILS:
+        logger.error("No recipients configured in NOTIFY_EMAIL.")
+        return False
+
     # Take only the top N
     top_jobs = jobs[:MAX_JOBS_IN_EMAIL]
 
@@ -129,14 +133,14 @@ def send_email(jobs: list[dict]) -> bool:
     msg = MIMEMultipart("alternative")
     msg["Subject"] = f" Daily Job Digest ({len(top_jobs)} matches)"
     msg["From"] = SMTP_EMAIL
-    msg["To"] = NOTIFY_EMAIL
+    msg["To"] = ", ".join(NOTIFY_EMAILS)
 
     # Plain text fallback
-    plain = "Top job matches:\\n\\n"
+    plain = "Top job matches:\n\n"
     for j in top_jobs:
-        plain += f"[{{j.get('score', 0)}}/10] {{j.get('title', '')}} at {{j.get('company', '')}}\\n"
-        plain += f"  {{j.get('job_url', '')}}\\n"
-        plain += f"  {{j.get('reasoning', '')}}\\n\\n"
+        plain += f"[{j.get('score', 0)}/10] {j.get('title', '')} at {j.get('company', '')}\n"
+        plain += f"  {j.get('job_url', '')}\n"
+        plain += f"  {j.get('reasoning', '')}\n\n"
 
     msg.attach(MIMEText(plain, "plain"))
     msg.attach(MIMEText(_build_html(top_jobs), "html"))
@@ -147,9 +151,14 @@ def send_email(jobs: list[dict]) -> bool:
             server.starttls()
             server.ehlo()
             server.login(SMTP_EMAIL, SMTP_PASSWORD)
-            server.send_message(msg)
+            server.sendmail(SMTP_EMAIL, NOTIFY_EMAILS, msg.as_string())
 
-        logger.info("✅ Email sent to %s with %d job matches.", msg["To"], len(top_jobs))
+        logger.info(
+            "✅ Email sent to %d recipient(s): %s with %d job matches.",
+            len(NOTIFY_EMAILS),
+            ", ".join(NOTIFY_EMAILS),
+            len(top_jobs),
+        )
         return True
 
     except Exception as e:
