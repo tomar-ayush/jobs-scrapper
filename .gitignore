@@ -6,3 +6,4 @@ secure-connect-*.zip
 jobs_ranked.csv
 jobs_summary.csv
 *.csv
+.kiro/

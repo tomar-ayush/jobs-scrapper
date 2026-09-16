@@ -6,6 +6,7 @@ structured relevance scores (1-10) with reasoning for each job.
 Design:
 - Batches are sized by estimated token count, not arbitrary fixed size.
 - Exhausted models (429) are skipped for the rest of the run.
+- Temporarily unavailable models (503) are also skipped for the rest of the run.
 - A batch either fully succeeds or fully fails. Failed batches are not
   inserted into DB, so those jobs get re-scraped and re-scored next run.
 """
@@ -13,6 +14,7 @@ Design:
 import json
 import logging
 import time
+from dataclasses import dataclass, field
 from typing import List, Dict, Any
 
 from google import genai
@@ -24,8 +26,19 @@ logger = logging.getLogger(__name__)
 
 _client = None
 
-# Models that returned 429 this run — skip for remaining batches
-_exhausted_models: set[str] = set()
+
+@dataclass
+class RunState:
+    """Per-invocation state for model availability tracking.
+
+    Created fresh at the start of each score_jobs() call so state never
+    leaks across runs, even when the process is long-lived.
+    """
+    # Models that returned 429 this run — skip for remaining batches
+    exhausted_models: set[str] = field(default_factory=set)
+    # Models that returned 503 this run — skip for remaining batches
+    unavailable_models: set[str] = field(default_factory=set)
+
 
 # ── Token estimation constants ────────────────────────────────────────
 # Rough estimate: 1 token ≈ 4 characters for English text
@@ -108,21 +121,12 @@ def _estimate_tokens(text: str) -> int:
 def _compute_batch_sizes(
     jobs: List[Dict[str, Any]],
 ) -> List[List[Dict[str, Any]]]:
-    """Split jobs into batches sized by token budget, not fixed count.
-
-    Each batch is packed to fit within MAX_INPUT_TOKENS (for input) and
-    MAX_OUTPUT_TOKENS (for output). This minimizes the number of API
-    calls and avoids the fragmentation of fixed-size batching.
-    """
+    """Split jobs into batches sized by token budget, not fixed count."""
     resume = _get_resume()
-    # Base prompt tokens (template + resume — everything except the jobs)
     base_prompt = SCORING_PROMPT.format(resume=resume, jobs_text="")
     base_tokens = _estimate_tokens(base_prompt)
 
-    # Budget for job text in input
     input_budget = MAX_INPUT_TOKENS - base_tokens
-
-    # Budget from output side: how many jobs can we fit in MAX_OUTPUT_TOKENS?
     max_jobs_by_output = MAX_OUTPUT_TOKENS // EST_OUTPUT_TOKENS_PER_JOB
 
     batches: list[list[dict]] = []
@@ -130,7 +134,6 @@ def _compute_batch_sizes(
     current_input_tokens = 0
 
     for job in jobs:
-        # Build the text block for this single job
         title = job.get("title", "Unknown")
         company = job.get("company", "Unknown")
         location = job.get("location", "Unknown")
@@ -138,20 +141,12 @@ def _compute_batch_sizes(
         job_text = f"--- JOB_X ---\nTITLE: {title}\nCOMPANY: {company}\nLOCATION: {location}\nDESCRIPTION:\n{desc}\n"
         job_tokens = _estimate_tokens(job_text)
 
-        would_exceed_input = (
-            current_input_tokens + job_tokens
-        ) > input_budget
-        would_exceed_output = (
-            len(current_batch) + 1
-        ) > max_jobs_by_output
-        would_exceed_hard_cap = (
-            len(current_batch) + 1
-        ) > HARD_MAX_BATCH_SIZE
+        would_exceed_input = (current_input_tokens + job_tokens) > input_budget
+        would_exceed_output = (len(current_batch) + 1) > max_jobs_by_output
+        would_exceed_hard_cap = (len(current_batch) + 1) > HARD_MAX_BATCH_SIZE
 
         if current_batch and (
-            would_exceed_input
-            or would_exceed_output
-            or would_exceed_hard_cap
+            would_exceed_input or would_exceed_output or would_exceed_hard_cap
         ):
             batches.append(current_batch)
             current_batch = []
@@ -203,14 +198,15 @@ def _parse_response(text: str) -> dict | None:
     return None
 
 
-def _call_model(prompt: str) -> dict | None:
-    """Try each non-exhausted fallback model. Returns parsed dict or None."""
+def _call_model(prompt: str, state: RunState) -> dict | None:
+    """Try each non-exhausted, non-unavailable model. Returns parsed dict or None."""
     available = [
-        m for m in FALLBACK_MODELS if m not in _exhausted_models
+        m for m in FALLBACK_MODELS
+        if m not in state.exhausted_models and m not in state.unavailable_models
     ]
 
     if not available:
-        logger.error("All models exhausted for this run.")
+        logger.error("All models exhausted or unavailable for this run.")
         return None
 
     for model_name in available:
@@ -236,49 +232,46 @@ def _call_model(prompt: str) -> dict | None:
 
         except Exception as e:
             error_msg = str(e).lower()
-            logger.warning(
-                "Gemini API error with model %s: %s", model_name, e
-            )
+            logger.warning("Gemini API error with model %s: %s", model_name, e)
 
-            if (
-                "429" in error_msg
-                or "quota" in error_msg
-                or "exhausted" in error_msg
-            ):
-                _exhausted_models.add(model_name)
-                remaining = len(FALLBACK_MODELS) - len(
-                    _exhausted_models
-                )
+            if "429" in error_msg or "quota" in error_msg or "exhausted" in error_msg:
+                state.exhausted_models.add(model_name)
+                remaining = len(FALLBACK_MODELS) - len(state.exhausted_models) - len(state.unavailable_models)
                 logger.info(
                     "Model %s exhausted. %d/%d models remaining.",
                     model_name,
                     remaining,
                     len(FALLBACK_MODELS),
                 )
-            else:
+            elif "503" in error_msg or "unavailable" in error_msg:
+                state.unavailable_models.add(model_name)
                 logger.info(
-                    "Non-quota error on %s, trying next...", model_name
+                    "Model %s temporarily unavailable (503), skipping for this run.",
+                    model_name,
                 )
+            else:
+                logger.info("Non-quota error on %s, trying next...", model_name)
             continue
 
     return None
 
 
-def _score_batch(jobs_batch: List[Dict[str, Any]]) -> dict | None:
+def _score_batch(jobs_batch: List[Dict[str, Any]], state: RunState) -> dict | None:
     """Score a batch. Returns parsed results dict, or None if all attempts fail.
 
-    Retries once on total failure (handles transient 503s).
+    Retries once on total failure (handles transient errors when all current
+    models are temporarily down but state has been updated).
     """
     prompt = _build_prompt(jobs_batch)
 
-    result = _call_model(prompt)
+    result = _call_model(prompt, state)
     if result:
         return result
 
     # One retry for transient failures
     logger.info("Batch failed. Retrying in 5s...")
     time.sleep(5)
-    result = _call_model(prompt)
+    result = _call_model(prompt, state)
     if result:
         return result
 
@@ -304,6 +297,9 @@ def score_jobs(jobs: list[dict], delay: float = 2.0) -> list[dict]:
     Returns:
         List of successfully scored job dicts only.
     """
+    # Fresh state per invocation — no leak across runs in the same process
+    state = RunState()
+
     total = len(jobs)
     batches = _compute_batch_sizes(jobs)
 
@@ -318,10 +314,9 @@ def score_jobs(jobs: list[dict], delay: float = 2.0) -> list[dict]:
     scored_jobs: list[dict] = []
 
     for batch_idx, batch in enumerate(batches, 1):
-        batch_results = _score_batch(batch)
+        batch_results = _score_batch(batch, state)
 
         if batch_results is None:
-            # Entire batch failed — these jobs are simply not returned
             logger.warning(
                 "Batch %d/%d FAILED (%d jobs dropped).",
                 batch_idx,
@@ -330,7 +325,6 @@ def score_jobs(jobs: list[dict], delay: float = 2.0) -> list[dict]:
             )
             continue
 
-        # Batch succeeded — apply scores to job dicts
         for j, job in enumerate(batch):
             job_key = f"JOB_{j}"
             res = batch_results.get(job_key, {})
