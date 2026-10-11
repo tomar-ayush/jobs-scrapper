@@ -1,6 +1,6 @@
 """Local admin UI for the job scraper.
 
-Manage email recipients, company job boards, search queries and settings
+Manage email recipients, company job boards, search queries, proxies and settings
 stored in Astra DB. The GitHub Actions pipeline reads these tables on every run.
 
 Run from the repo root:  python frontend/server.py
@@ -46,7 +46,7 @@ JOB_SORTS = {
 }
 LIST_SORTS = {
     "recipients": {"email": 1}, "companies": {"slug": 1, "portal": 1},
-    "search_queries": {"query": 1}, "blocked_companies": {"name": 1},
+    "search_queries": {"query": 1}, "blocked_companies": {"name": 1}, "proxies": {"host": 1, "port": 1},
 }
 
 
@@ -64,6 +64,7 @@ INDEX_HTML = Path(__file__).resolve().parent / "index.html"
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 SLUG_RE = re.compile(r"^[A-Za-z0-9._-]{1,100}$")
+HOST_RE = re.compile(r"^[A-Za-z0-9.-]{1,253}$")
 WORKDAY_SLUG_RE = re.compile(r"^[a-z0-9-]+\.wd\d+/[A-Za-z0-9_-]{1,80}$")
 
 # Collection name -> (fields written from the form, key fields).
@@ -75,6 +76,7 @@ TABLES = {
     "search_queries": (["query"], ["query"]),
     "settings": (["name", "value"], ["name"]),
     "blocked_companies": (["name"], ["name"]),  # _id is company_key(name), see _row_id
+    "proxies": (["host", "port", "username", "password"], ["host", "port"]),
 }
 
 
@@ -89,6 +91,13 @@ def validate(table: str, data: dict) -> str | None:
         return "Query must be 1-100 characters."
     if table == "blocked_companies" and (len(data["name"]) > 100 or not company_key(data["name"])):
         return "Enter a company name (up to 100 characters)."
+    if table == "proxies":
+        if not HOST_RE.match(data["host"]):
+            return "Enter the proxy host or IP address."
+        if not (data["port"].isdigit() and 1 <= int(data["port"]) <= 65535):
+            return "Port must be a number from 1 to 65535."
+        if not data["username"] or not data["password"] or len(data["username"]) > 200 or len(data["password"]) > 200:
+            return "Enter the proxy username and password (up to 200 characters each)."
     if table == "companies":
         if data["portal"] not in BOARD_API_URLS:
             return f"Portal must be one of: {', '.join(BOARD_API_URLS)}."
@@ -210,6 +219,8 @@ class Handler(BaseHTTPRequestHandler):
         total, capped = count.result()
         for item in items:
             item.pop("$lexical", None)
+            if name == "proxies":  # the password is never sent back to the page
+                item.pop("password", None)
         return {
             "items": items, "total": total, "capped": capped, "page": page, "size": size,
             "has_more": len(items) == size if capped else page * size < total,
@@ -233,6 +244,7 @@ class Handler(BaseHTTPRequestHandler):
             "companies": count("companies"),
             "queries": count("search_queries"),
             "blocklist": count("blocked_companies"),
+            "proxies": count("proxies"),
         }
         by_site = {site: count("jobs", {"site": site}) for site in SOURCES}
         top = POOL.submit(db.page, "jobs", {}, JOB_SORTS["score"], 1, 8, NO_DESCRIPTION)

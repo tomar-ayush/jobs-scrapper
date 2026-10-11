@@ -161,6 +161,7 @@
       <a href="#companies" data-view="companies"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 14V2h7v4h5v8zm2-9h3V4H4zm0 3h3V7H4zm0 3h3v-1H4zm6 0h3v-1h-3zm0-3h3V7h-3z"/></svg>Companies<span class="count" data-nav-count="companies"></span></a>
       <a href="#queries" data-view="queries"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M6.5 1a5.5 5.5 0 014.4 8.8l4 4-1.4 1.4-4-4A5.5 5.5 0 116.5 1zm0 2a3.5 3.5 0 100 7 3.5 3.5 0 000-7z"/></svg>Search queries<span class="count" data-nav-count="queries"></span></a>
       <a href="#blocklist" data-view="blocklist"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2a5 5 0 013.9 8.1L4.9 4.1A5 5 0 018 3zM4.1 4.9l7 7A5 5 0 014.1 4.9z"/></svg>Blocklist<span class="count" data-nav-count="blocklist"></span></a>
+      <a href="#proxies" data-view="proxies"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2a5 5 0 110 10A5 5 0 018 3zm0 2a3 3 0 100 6 3 3 0 000-6z"/></svg>Proxies<span class="count" data-nav-count="proxies"></span></a>
       <a href="#settings" data-view="settings"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M6.5 1h3l.4 2 1.4.8 1.9-.7 1.5 2.6-1.5 1.3v1.6l1.5 1.3-1.5 2.6-1.9-.7-1.4.8-.4 2h-3l-.4-2-1.4-.8-1.9.7L1.3 10l1.5-1.3V7.1L1.3 5.8l1.5-2.6 1.9.7 1.4-.8zM8 6a2 2 0 100 4 2 2 0 000-4z"/></svg>Settings</a>
     </nav>
     <div class="foot">Local admin. Changes apply on the next pipeline run.</div>
@@ -281,6 +282,28 @@
         </div>
       </section>
 
+      <section class="view" data-view="proxies">
+        <div class="card">
+          <div class="card-head"><div><h2>Proxies<span class="total" data-total="proxies"></span></h2><p>Used only for Glassdoor, which blocks GitHub's servers. Every other source connects directly. With several proxies, requests rotate between them. With none, Glassdoor is tried without one. Saving the same host and port again replaces its password. Passwords are never shown here.</p></div></div>
+          <div class="card-body">
+            <form class="inline" data-table="proxies" autocomplete="off">
+              <label class="sr-only" for="p-host">Host</label>
+              <input id="p-host" name="host" placeholder="Host or IP" required maxlength="253">
+              <label class="sr-only" for="p-port">Port</label>
+              <input id="p-port" name="port" placeholder="Port" required inputmode="numeric" maxlength="5" style="max-width:90px">
+              <label class="sr-only" for="p-user">Username</label>
+              <input id="p-user" name="username" placeholder="Username" required autocomplete="off">
+              <label class="sr-only" for="p-pass">Password</label>
+              <input id="p-pass" name="password" type="password" placeholder="Password" required autocomplete="new-password">
+              <button class="btn" type="submit">Add</button>
+            </form>
+            <p class="msg" data-msg="proxies" role="status"></p>
+          </div>
+          <div class="table-wrap"><table data-list="proxies"></table></div>
+          <div class="pager" data-pager="proxies"></div>
+        </div>
+      </section>
+
       <section class="view" data-view="settings">
         <div class="card">
           <div class="card-head"><div><h2>Pipeline settings<span class="total" data-total="settings"></span></h2><p>These override config.py on the next run without redeploying. Reset goes back to the default.</p></div></div>
@@ -304,9 +327,10 @@ const VIEWS = {
   companies: { cols: ["name", "portal", "slug", "links"], key: ["portal", "slug"], nav: "companies" },
   search_queries: { cols: ["query", "added_at"], key: ["query"], nav: "queries" },
   blocked_companies: { cols: ["name", "added_at"], key: ["name"], nav: "blocklist", remove: "Unblock" },
+  proxies: { cols: ["host", "port", "username", "added_at"], key: ["host", "port"], nav: "proxies" },
 };
-const VIEW_TABLE = { recipients: "recipients", companies: "companies", queries: "search_queries", blocklist: "blocked_companies", jobs: "jobs" };
-const TITLES = { overview: "Overview", jobs: "Jobs", recipients: "Email recipients", companies: "Company job boards", queries: "Search queries", blocklist: "Company blocklist", settings: "Settings" };
+const VIEW_TABLE = { recipients: "recipients", companies: "companies", queries: "search_queries", blocklist: "blocked_companies", proxies: "proxies", jobs: "jobs" };
+const TITLES = { overview: "Overview", jobs: "Jobs", recipients: "Email recipients", companies: "Company job boards", queries: "Search queries", blocklist: "Company blocklist", proxies: "Proxies", settings: "Settings" };
 const SETTING_LABELS = {
   LOCATION: ["Location", "Used for LinkedIn and Indeed searches."],
   HOURS_OLD: ["Posted within (hours)", "How far back searches look. 1 to 168."],
@@ -324,7 +348,7 @@ const SETTING_GROUPS = [
   ["LinkedIn", ["LINKEDIN_UNDER_10_APPLICANTS", "LINKEDIN_EXPERIENCE_LEVELS", "LINKEDIN_REQUEST_DELAY"]],
   ["Company job boards (Greenhouse, Lever, Ashby, Workday)", ["ATS_HOURS_OLD", "ATS_TITLE_KEYWORDS", "ATS_EXCLUDE_TITLE_KEYWORDS", "ATS_LOCATION_KEYWORDS"]],
 ];
-const paging = { jobs: { page: 1, size: 20 }, recipients: { page: 1, size: 20 }, companies: { page: 1, size: 20 }, search_queries: { page: 1, size: 20 }, blocked_companies: { page: 1, size: 20 } };
+const paging = { jobs: { page: 1, size: 20 }, recipients: { page: 1, size: 20 }, companies: { page: 1, size: 20 }, search_queries: { page: 1, size: 20 }, blocked_companies: { page: 1, size: 20 }, proxies: { page: 1, size: 20 } };
 let minScore = 6;
 
 function el(tag, text, cls) {

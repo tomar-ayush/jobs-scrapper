@@ -1,12 +1,13 @@
 """Astra DB (Data API) storage.
 
 - `jobs`: every scored job, keyed by URL, so we never re-score or re-notify.
-- `recipients`, `companies`, `search_queries`, `settings`: edited from the
+- `recipients`, `companies`, `search_queries`, `settings`, `blocked_companies`, `proxies`: edited from the
   frontend and read by every pipeline run. Each document's `_id` is its key.
 """
 
 import logging
 import re
+from urllib.parse import quote
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
@@ -18,7 +19,7 @@ from config import ASTRA_DB_API_ENDPOINT, ASTRA_DB_TOKEN
 
 logger = logging.getLogger(__name__)
 
-ADMIN_COLLECTIONS = ["recipients", "companies", "search_queries", "settings", "blocked_companies"]
+ADMIN_COLLECTIONS = ["recipients", "companies", "search_queries", "settings", "blocked_companies", "proxies"]
 LEGAL_WORDS = {"pvt", "private", "ltd", "limited", "llp", "llc", "inc", "corp", "corporation", "co"}
 # Long text fields are never filtered on; skipping their index avoids the
 # Data API's indexed-string size limit.
@@ -80,6 +81,13 @@ class JobDB:
     def get_blocked_keys(self) -> set[str]:
         """company_key of every blocklisted company (it is the document _id)."""
         return {r["_id"] for r in self.list_rows("blocked_companies")}
+
+    def get_proxies(self) -> list[str]:
+        """Proxy URLs (user:password@host:port) for Glassdoor, which blocks GitHub's servers."""
+        return [
+            f"http://{quote(r['username'], safe='')}:{quote(r['password'], safe='')}@{r['host']}:{r['port']}"
+            for r in self.list_rows("proxies")
+        ]
 
     def get_settings(self) -> dict[str, str]:
         return {r["name"]: r["value"] for r in self.list_rows("settings")}

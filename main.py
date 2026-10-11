@@ -82,7 +82,10 @@ def main():
 
     # ── Step 1: Scrape jobs ───────────────────────────────────────
     logger.info("\n📡 Step 1/5: Scraping jobs...")
-    df = scrape_all(queries, companies)
+    proxies = db.get_proxies()
+    if proxies:
+        logger.info("Glassdoor will use %d proxy(ies).", len(proxies))
+    df = scrape_all(queries, companies, proxies)
     df, blocked_count = drop_blocked(df, db.get_blocked_keys())
     if blocked_count:
         logger.info("Dropped %d jobs from blocklisted companies.", blocked_count)

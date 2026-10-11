@@ -362,7 +362,7 @@ def _scrape_boards(companies: list[dict]) -> list[dict]:
 # ── Orchestration ─────────────────────────────────────────────────────
 
 
-def scrape_all(queries: list[str], companies: list[dict]) -> pd.DataFrame:
+def scrape_all(queries: list[str], companies: list[dict], proxies: list[str] | None = None) -> pd.DataFrame:
     """Scrape Indeed + LinkedIn for each query, plus all company boards.
 
     Returns a deduplicated DataFrame with columns including:
@@ -378,7 +378,7 @@ def scrape_all(queries: list[str], companies: list[dict]) -> pd.DataFrame:
     for query in queries:
         try:
             jobs = scrape_jobs(
-                site_name=["indeed", "naukri", "glassdoor"],
+                site_name=["indeed", "naukri"],
                 search_term=query,
                 location=LOCATION,
                 results_wanted=RESULTS_PER_QUERY,
@@ -388,6 +388,20 @@ def scrape_all(queries: list[str], companies: list[dict]) -> pd.DataFrame:
         except Exception as e:
             logger.warning("  ✗ %-25s (indeed) → %s", query, e)
             jobs = pd.DataFrame()
+
+        try:  # Glassdoor blocks GitHub's servers, so it alone goes through the proxies
+            glassdoor = scrape_jobs(
+                site_name=["glassdoor"],
+                search_term=query,
+                location=LOCATION,
+                results_wanted=RESULTS_PER_QUERY,
+                hours_old=HOURS_OLD,
+                country_indeed="India",
+                proxies=proxies or None,
+            )
+            jobs = pd.concat([jobs, glassdoor], ignore_index=True)
+        except Exception as e:
+            logger.warning("  ✗ %-25s (glassdoor) → %s", query, type(e).__name__)
 
         linkedin: list[dict] = []
         if not linkedin_blocked:

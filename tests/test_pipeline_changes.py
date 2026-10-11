@@ -557,3 +557,40 @@ def test_plain_text_carries_the_same_links_and_message_as_the_html():
     assert "STRONG MATCHES (1)" in plain and "WORTH A LOOK (1)" in plain
     assert "<table" not in plain and "<div" not in plain  # no markup in the text part
     assert "prefers-color-scheme: dark" in page and 'lang="en"' in page and "<img" not in page
+
+
+# ── Glassdoor proxies ─────────────────────────────────────────────────
+
+
+def test_proxies_are_saved_but_the_password_is_never_returned(server):
+    base, db = server
+    body = {"host": "1.2.3.4", "port": "8080", "username": "u", "password": "secret"}
+    assert call(base, "POST", "/api/proxies", body)[0] == 200
+    assert db.collections["proxies"]["1.2.3.4:8080"]["password"] == "secret"
+    _, listing = call(base, "GET", "/api/proxies")
+    assert listing["total"] == 1 and "password" not in listing["items"][0]
+    assert call(base, "DELETE", "/api/proxies", {"host": "1.2.3.4", "port": "8080"})[0] == 200
+    assert db.collections["proxies"] == {}
+
+
+@pytest.mark.parametrize("change", [{"port": "0"}, {"port": "99999"}, {"port": "x"}, {"host": "bad host"}, {"username": ""}, {"password": ""}])
+def test_proxy_validation(server, change):
+    base, _ = server
+    body = {"host": "1.2.3.4", "port": "8080", "username": "u", "password": "p", **change}
+    assert call(base, "POST", "/api/proxies", body)[0] == 400
+
+
+def test_get_proxies_builds_urls_and_encodes_special_characters():
+    from db import JobDB
+    db = JobDB.__new__(JobDB)
+    db.list_rows = lambda name: [{"host": "h", "port": "1", "username": "a@b", "password": "p:/w"}]
+    assert db.get_proxies() == ["http://a%40b:p%3A%2Fw@h:1"]
+
+
+def test_only_glassdoor_goes_through_the_proxies(monkeypatch):
+    import pandas as pd
+    calls = []
+    monkeypatch.setattr(scraper, "scrape_jobs", lambda **kw: calls.append((kw["site_name"], kw.get("proxies"))) or pd.DataFrame())
+    monkeypatch.setattr(scraper, "_scrape_linkedin", lambda q: [])
+    scraper.scrape_all(["q"], [], ["http://u:p@h:1"])
+    assert calls == [(["indeed", "naukri"], None), (["glassdoor"], ["http://u:p@h:1"])]

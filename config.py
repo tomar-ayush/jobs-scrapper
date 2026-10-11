@@ -40,12 +40,12 @@ ATS_LOCATION_KEYWORDS = [
 
 # ── Astra DB ──────────────────────────────────────────────────────────
 
-ASTRA_DB_API_ENDPOINT = os.getenv("ASTRA_DB_API_ENDPOINT", "")
-ASTRA_DB_TOKEN = os.getenv("ASTRA_DB_TOKEN", "")
+ASTRA_DB_API_ENDPOINT = os.getenv("ASTRA_DB_API_ENDPOINT", "").strip()
+ASTRA_DB_TOKEN = os.getenv("ASTRA_DB_TOKEN", "").strip()
 
 # ── Gemini ────────────────────────────────────────────────────────────
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GEMINI_MODEL = (
     "gemini-3.7-flash"  # fast + cheap, good enough for scoring
 )
@@ -61,8 +61,8 @@ FALLBACK_MODELS = [
 
 # ── Email ─────────────────────────────────────────────────────────────
 
-SMTP_EMAIL = os.getenv("SMTP_EMAIL", "")  # your Gmail address
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")  # Gmail App Password
+SMTP_EMAIL = os.getenv("SMTP_EMAIL", "").strip()  # your Gmail address
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "").strip()  # Gmail App Password
 NOTIFY_EMAILS: list[str] = [
     addr.strip()
     for addr in os.getenv("NOTIFY_EMAIL", "").split(",")
