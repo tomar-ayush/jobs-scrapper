@@ -10,7 +10,7 @@ on:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 120
 
     steps:
       - name: Checkout repository
@@ -25,27 +25,10 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Decode Astra DB secure connect bundle
-        env:
-          BUNDLE_B64: ${{ secrets.ASTRA_DB_BUNDLE_BASE64 }}
-        run: |
-          python -c "
-          import base64, os, zipfile
-          b64 = os.environ['BUNDLE_B64']
-          data = base64.b64decode(b64)
-          with open('secure-connect-jobs_store.zip', 'wb') as f:
-              f.write(data)
-          zipfile.ZipFile('secure-connect-jobs_store.zip')
-          print(f'✓ Valid zip file ({len(data)} bytes)')
-          "
-
       - name: Run job scanner
         env:
-          ASTRA_DB_BUNDLE_PATH: ./secure-connect-jobs_store.zip
-          ASTRA_DB_CLIENT_ID: ${{ secrets.ASTRA_DB_CLIENT_ID }}
-          ASTRA_DB_CLIENT_SECRET: ${{ secrets.ASTRA_DB_CLIENT_SECRET }}
+          ASTRA_DB_API_ENDPOINT: ${{ secrets.ASTRA_DB_API_ENDPOINT }}
           ASTRA_DB_TOKEN: ${{ secrets.ASTRA_DB_TOKEN }}
-          ASTRA_DB_KEYSPACE: ${{ secrets.ASTRA_DB_KEYSPACE }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SMTP_EMAIL: ${{ secrets.SMTP_EMAIL }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}

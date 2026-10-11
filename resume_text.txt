@@ -13,7 +13,7 @@ Cloud, DevOps & Security: AWS (S3, EC2), Docker, CI/CD (Jenkins), Git, Linux (RH
 CS Fundamentals: Data Structures & Algorithms, OOP, OS, Computer Networks
 
 EXPERIENCE
-Morgan Stanley | Software Developer Apprentice (Technology Control Group) | Aug 2025 - Present | Bengaluru, India
+Morgan Stanley | Software Developer Apprentice (Technology Control Group) | Aug 2025 - Aug 2026 | Bengaluru, India
 - Contributed to Sentinel, Morgan Stanley's centralized cyber-risk data platform supporting risk aggregation, compliance evaluation, and enterprise-wide risk analytics across multiple downstream applications including TRFS and PAC.
 - Contributed to the productionization of a Kafka-based Policy-as-Code (PAC) platform that evaluated repository compliance against organizational security policies, integrating repository scan results, metadata enrichment, Neo4j graph contextualization, and Open Policy Agent (OPA) policy evaluation workflows.
 - Architected an end-to-end regression validation framework that verified Airflow workflow execution, S3 data integrity, Neo4j graph updates, relationship consistency, and incremental-load reconciliation for created, updated, and deleted entities, reducing release validation time from 2-3 days to 5-7 hours through automated execution and reporting.

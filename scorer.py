@@ -113,6 +113,12 @@ def _get_resume() -> str:
     return _resume_text
 
 
+def _description(job: Dict[str, Any]) -> str:
+    """Return the capped description; pandas fills missing ones with NaN (a float)."""
+    desc = job.get("description")
+    return desc[:DESC_CHAR_LIMIT] if isinstance(desc, str) else ""
+
+
 def _estimate_tokens(text: str) -> int:
     """Rough token count from character length."""
     return len(text) // CHARS_PER_TOKEN
@@ -137,7 +143,7 @@ def _compute_batch_sizes(
         title = job.get("title", "Unknown")
         company = job.get("company", "Unknown")
         location = job.get("location", "Unknown")
-        desc = job.get("description", "")[:DESC_CHAR_LIMIT]
+        desc = _description(job)
         job_text = f"--- JOB_X ---\nTITLE: {title}\nCOMPANY: {company}\nLOCATION: {location}\nDESCRIPTION:\n{desc}\n"
         job_tokens = _estimate_tokens(job_text)
 
@@ -168,7 +174,7 @@ def _build_prompt(jobs_batch: List[Dict[str, Any]]) -> str:
         title = job.get("title", "Unknown")
         company = job.get("company", "Unknown")
         location = job.get("location", "Unknown")
-        desc = job.get("description", "")[:DESC_CHAR_LIMIT]
+        desc = _description(job)
         jobs_text_parts.append(
             f"--- JOB_{i} ---\nTITLE: {title}\nCOMPANY: {company}\nLOCATION: {location}\nDESCRIPTION:\n{desc}\n"
         )

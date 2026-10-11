@@ -1,0 +1,762 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job Scraper</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f4f5f7; --surface: #ffffff; --surface-2: #f8f9fb; --border: #e3e5ea;
+    --text: #0b0b0b; --text-2: #52514e; --muted: #7a7974;
+    --accent: #2a78d6; --on-accent: #ffffff; --accent-soft: rgba(42, 120, 214, 0.12);
+    --good: #0a7a0a; --good-soft: rgba(12, 163, 12, 0.14);
+    --warn: #8a5a00; --warn-soft: rgba(250, 178, 25, 0.22);
+    --danger: #b12f2f; --danger-soft: rgba(208, 59, 59, 0.12);
+    --sidebar: #15181d; --sidebar-text: #c9ccd3; --sidebar-active: #ffffff; --sidebar-hover: rgba(255,255,255,0.07);
+    --shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #121315; --surface: #1a1b1e; --surface-2: #212327; --border: #2d3036;
+      --text: #f0efec; --text-2: #c3c2b7; --muted: #8f8e88;
+      --accent: #3987e5; --on-accent: #0b1220; --accent-soft: rgba(57, 135, 229, 0.18);
+      --good: #5fd35f; --good-soft: rgba(12, 163, 12, 0.2);
+      --warn: #fab219; --warn-soft: rgba(250, 178, 25, 0.16);
+      --danger: #f08080; --danger-soft: rgba(208, 59, 59, 0.2);
+      --sidebar: #0d0e10; --shadow: none;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #121315; --surface: #1a1b1e; --surface-2: #212327; --border: #2d3036;
+    --text: #f0efec; --text-2: #c3c2b7; --muted: #8f8e88;
+    --accent: #3987e5; --on-accent: #0b1220; --accent-soft: rgba(57, 135, 229, 0.18);
+    --good: #5fd35f; --good-soft: rgba(12, 163, 12, 0.2);
+    --warn: #fab219; --warn-soft: rgba(250, 178, 25, 0.16);
+    --danger: #f08080; --danger-soft: rgba(208, 59, 59, 0.2);
+    --sidebar: #0d0e10; --shadow: none;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; min-height: 100vh; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  button, input, select { font: inherit; }
+  :is(button, input, select, a):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .layout { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; }
+  .sidebar { background: var(--sidebar); color: var(--sidebar-text); padding: 20px 14px; display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; height: 100vh; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 4px 10px 18px; color: var(--sidebar-active); font-weight: 700; font-size: 15px; }
+  .brand .logo { width: 28px; height: 28px; border-radius: 7px; background: var(--accent); display: grid; place-items: center; color: #fff; font-size: 13px; }
+  .nav-label { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 12px 10px 4px; }
+  .nav a { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; color: var(--sidebar-text); }
+  .nav a:hover { background: var(--sidebar-hover); text-decoration: none; }
+  .nav a.active { background: var(--accent-soft); color: var(--sidebar-active); font-weight: 600; }
+  .nav svg { width: 16px; height: 16px; flex: none; opacity: 0.85; }
+  .nav a .count { margin-left: auto; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .nav a.active .count { color: var(--sidebar-active); }
+  .sidebar .foot { margin-top: auto; font-size: 12px; color: var(--muted); padding: 10px; }
+
+  .main { min-width: 0; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 28px; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 2; }
+  .topbar h1 { font-size: 18px; margin: 0; }
+  .topbar .meta { color: var(--muted); font-size: 13px; }
+  .content { padding: 24px 28px 48px; display: grid; gap: 20px; max-width: 1280px; }
+
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border: 1px solid transparent; border-radius: 8px; background: var(--accent); color: var(--on-accent); font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  .btn.secondary { background: var(--surface); color: var(--text); border-color: var(--border); }
+  .btn.ghost { background: transparent; color: var(--danger); padding: 4px 8px; font-weight: 500; }
+  .btn.ghost:hover { background: var(--danger-soft); }
+
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; box-shadow: var(--shadow); }
+  .kpi .label { color: var(--text-2); font-size: 13px; }
+  .kpi .value { font-size: 28px; font-weight: 600; margin-top: 4px; line-height: 1.2; }
+  .kpi .sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .card-head h2 { font-size: 15px; margin: 0; }
+  .card-head p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+  .card-body { padding: 16px 20px; }
+  .grid-2 { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+
+  .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .filters input, .filters select, form.inline input, form.inline select { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--text); min-width: 0; }
+  .filters input[type="search"] { flex: 1 1 220px; }
+  .filters label.check { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); }
+  form.inline { display: flex; flex-wrap: wrap; gap: 8px; }
+  form.inline input, form.inline select { flex: 1 1 160px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align: left; padding: 10px 12px; border-top: 1px solid var(--border); vertical-align: top; }
+  thead th, tr:first-child th { border-top: 0; color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; background: var(--surface-2); white-space: nowrap; }
+  tbody tr:hover { background: var(--surface-2); }
+  td .title { font-weight: 600; }
+  td .sub, .sub { color: var(--text-2); font-size: 12.5px; margin-top: 2px; }
+  .table-wrap.loading { opacity: 0.55; transition: opacity 0.12s; }
+  .pager .page-of { color: var(--text); font-variant-numeric: tabular-nums; min-width: 84px; text-align: center; }
+  td.n, th.n { color: var(--muted); width: 1%; text-align: right; font-variant-numeric: tabular-nums; }
+  .total { font-weight: 500; color: var(--muted); margin-left: 6px; }
+  .pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--border); color: var(--text-2); font-size: 13px; }
+  .pager .controls { display: flex; align-items: center; gap: 8px; }
+  .pager select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--text); }
+  .btn.small { padding: 1px 8px; font-size: 12px; margin-left: 6px; }
+  .btn.small.armed { background: var(--danger-soft); }
+  .empty { color: var(--muted); padding: 24px 12px; text-align: center; }
+
+  .badge { display: inline-block; min-width: 30px; text-align: center; padding: 2px 8px; border-radius: 999px; font-weight: 700; font-size: 12.5px; }
+  .badge.good { background: var(--good-soft); color: var(--good); }
+  .badge.warn { background: var(--warn-soft); color: var(--warn); }
+  .badge.low { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border); }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; background: var(--accent-soft); color: var(--text); text-transform: capitalize; white-space: nowrap; }
+  .pill.muted { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border); }
+  .pill.early { background: var(--good-soft); color: var(--good); font-weight: 600; }
+
+  .msg { min-height: 20px; font-size: 13px; margin: 10px 0 0; color: var(--text-2); }
+  .msg.error { color: var(--danger); }
+  .card-body:has(> .msg:only-child:empty) { display: none; }
+  table.cfg td { vertical-align: top; }
+  table.cfg tr.group td { background: var(--surface-2); color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+  table.cfg .name { font-weight: 600; }
+  table.cfg .hint { color: var(--muted); font-size: 12.5px; margin-top: 2px; max-width: 360px; }
+  table.cfg input, table.cfg select, table.cfg textarea { width: 100%; min-width: 220px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--text); font: inherit; }
+  table.cfg textarea { min-height: 64px; resize: vertical; }
+  table.cfg .field-msg { min-height: 0; font-size: 12.5px; margin-top: 4px; color: var(--text-2); }
+  table.cfg .field-msg.error { color: var(--danger); }
+  table.cfg td.actions { white-space: nowrap; }
+  .view { display: none; }
+  .view.active { display: grid; gap: 20px; }
+  .source-list { list-style: none; margin: 0; padding: 0; }
+  .source-list li { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-top: 1px solid var(--border); }
+  .source-list li:first-child { border-top: 0; }
+
+  @media (max-width: 860px) {
+    .layout { grid-template-columns: 1fr; }
+    .sidebar { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; padding: 12px 16px; }
+    .brand { padding: 4px 6px; }
+    .nav { display: flex; flex-wrap: wrap; gap: 2px; }
+    .nav-label, .sidebar .foot { display: none; }
+    .topbar, .content { padding-left: 16px; padding-right: 16px; }
+    .grid-2 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand"><span class="logo" aria-hidden="true">JS</span> Job Scraper</div>
+    <nav class="nav" aria-label="Main">
+      <div class="nav-label">Monitor</div>
+      <a href="#overview" data-view="overview"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1 1h6v6H1zM9 1h6v6H9zM1 9h6v6H1zM9 9h6v6H9z"/></svg>Overview</a>
+      <a href="#jobs" data-view="jobs"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 3h12v2H2zM2 7h12v2H2zM2 11h12v2H2z"/></svg>Jobs<span class="count" data-nav-count="jobs"></span></a>
+      <div class="nav-label">Configure</div>
+      <a href="#recipients" data-view="recipients"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1 3h14v10H1zm1.5 1.5v.6L8 9l5.5-3.9v-.6zM2.5 7.2V11.5h11V7.2L8 11z"/></svg>Recipients<span class="count" data-nav-count="recipients"></span></a>
+      <a href="#companies" data-view="companies"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 14V2h7v4h5v8zm2-9h3V4H4zm0 3h3V7H4zm0 3h3v-1H4zm6 0h3v-1h-3zm0-3h3V7h-3z"/></svg>Companies<span class="count" data-nav-count="companies"></span></a>
+      <a href="#queries" data-view="queries"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M6.5 1a5.5 5.5 0 014.4 8.8l4 4-1.4 1.4-4-4A5.5 5.5 0 116.5 1zm0 2a3.5 3.5 0 100 7 3.5 3.5 0 000-7z"/></svg>Search queries<span class="count" data-nav-count="queries"></span></a>
+      <a href="#blocklist" data-view="blocklist"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2a5 5 0 013.9 8.1L4.9 4.1A5 5 0 018 3zM4.1 4.9l7 7A5 5 0 014.1 4.9z"/></svg>Blocklist<span class="count" data-nav-count="blocklist"></span></a>
+      <a href="#settings" data-view="settings"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M6.5 1h3l.4 2 1.4.8 1.9-.7 1.5 2.6-1.5 1.3v1.6l1.5 1.3-1.5 2.6-1.9-.7-1.4.8-.4 2h-3l-.4-2-1.4-.8-1.9.7L1.3 10l1.5-1.3V7.1L1.3 5.8l1.5-2.6 1.9.7 1.4-.8zM8 6a2 2 0 100 4 2 2 0 000-4z"/></svg>Settings</a>
+    </nav>
+    <div class="foot">Local admin. Changes apply on the next pipeline run.</div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div>
+        <h1 id="view-title">Overview</h1>
+        <div class="meta" id="last-run">Loading…</div>
+      </div>
+      <button class="btn secondary" id="refresh" type="button">Refresh</button>
+    </header>
+
+    <main class="content">
+      <section class="view" data-view="overview">
+        <div class="kpis" id="kpis"></div>
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-head"><div><h2>Latest strong matches</h2><p>Highest scores first, newest within a score</p></div><a href="#jobs">View all jobs</a></div>
+            <div class="table-wrap"><table id="top-jobs"></table></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><div><h2>Jobs by source</h2><p>All tracked jobs</p></div></div>
+            <div class="card-body"><ul class="source-list" id="by-source"></ul></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" data-view="jobs">
+        <div class="card">
+          <div class="card-head">
+            <div><h2>All jobs<span class="total" data-total="jobs"></span></h2><p id="jobs-count">Scored jobs stored by the pipeline</p></div>
+            <div class="filters">
+              <label class="sr-only" for="f-search">Search</label>
+              <input id="f-search" type="search" placeholder="Search words in title, company, location" title="Matches whole words, e.g. react, chennai, full stack">
+              <label class="sr-only" for="f-site">Source</label>
+              <select id="f-site"><option value="">All sources</option></select>
+              <label class="sr-only" for="f-score">Minimum score</label>
+              <select id="f-score"><option value="0">Any score</option><option value="6">Score 6+</option><option value="8">Score 8+</option></select>
+              <label class="sr-only" for="f-sort">Sort</label>
+              <select id="f-sort"><option value="recent">Newest first</option><option value="score">Highest score</option><option value="applicants">Fewest applicants (LinkedIn)</option></select>
+              <label class="check"><input id="f-early" type="checkbox"> Early applicant only</label>
+            </div>
+          </div>
+          <div class="table-wrap"><table id="jobs-table"></table></div>
+          <div class="pager" data-pager="jobs"></div>
+        </div>
+      </section>
+
+      <section class="view" data-view="recipients">
+        <div class="card">
+          <div class="card-head"><div><h2>Email recipients<span class="total" data-total="recipients"></span></h2><p>Who gets the digest. If empty, the NOTIFY_EMAIL secret is used.</p></div></div>
+          <div class="card-body">
+            <form class="inline" data-table="recipients">
+              <label class="sr-only" for="r-email">Email</label>
+              <input id="r-email" name="email" type="email" placeholder="you@example.com" required>
+              <button class="btn" type="submit">Add</button>
+            </form>
+            <p class="msg" data-msg="recipients" role="status"></p>
+          </div>
+          <div class="table-wrap"><table data-list="recipients"></table></div>
+          <div class="pager" data-pager="recipients"></div>
+        </div>
+      </section>
+
+      <section class="view" data-view="companies">
+        <div class="card">
+          <div class="card-head"><div><h2>Company job boards<span class="total" data-total="companies"></span></h2><p>The slug is the company part of the board URL, e.g. boards.greenhouse.io/<b>airbnb</b>, jobs.lever.co/<b>palantir</b>, jobs.ashbyhq.com/<b>openai</b>. For Workday use <b>nvidia.wd5/NVIDIAExternalCareerSite</b> from nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite. Checked before saving.</p></div></div>
+          <div class="card-body">
+            <form class="inline" data-table="companies">
+              <label class="sr-only" for="c-portal">Portal</label>
+              <select id="c-portal" name="portal"><option value="greenhouse">Greenhouse</option><option value="lever">Lever</option><option value="ashby">Ashby</option><option value="workday">Workday</option></select>
+              <label class="sr-only" for="c-slug">Slug</label>
+              <input id="c-slug" name="slug" placeholder="slug" required>
+              <label class="sr-only" for="c-name">Company name</label>
+              <input id="c-name" name="name" placeholder="Company name">
+              <label class="sr-only" for="c-url">Careers link</label>
+              <input id="c-url" name="careers_url" type="url" placeholder="Careers page link (optional)">
+              <button class="btn" type="submit">Add</button>
+            </form>
+            <p class="msg" data-msg="companies" role="status"></p>
+          </div>
+          <div class="table-wrap"><table data-list="companies"></table></div>
+          <div class="pager" data-pager="companies"></div>
+        </div>
+      </section>
+
+      <section class="view" data-view="queries">
+        <div class="card">
+          <div class="card-head"><div><h2>Search queries<span class="total" data-total="search_queries"></span></h2><p>Used for LinkedIn and Indeed. If empty, the defaults in config.py are used. Two or three broad queries beat many overlapping ones.</p></div></div>
+          <div class="card-body">
+            <form class="inline" data-table="search_queries">
+              <label class="sr-only" for="q-query">Query</label>
+              <input id="q-query" name="query" placeholder="e.g. Backend Developer" required>
+              <button class="btn" type="submit">Add</button>
+            </form>
+            <p class="msg" data-msg="search_queries" role="status"></p>
+          </div>
+          <div class="table-wrap"><table data-list="search_queries"></table></div>
+          <div class="pager" data-pager="search_queries"></div>
+        </div>
+      </section>
+
+      <section class="view" data-view="blocklist">
+        <div class="card">
+          <div class="card-head"><div><h2>Company blocklist<span class="total" data-total="blocked_companies"></span></h2><p>Scam or spam companies. Their jobs are dropped before scoring, never emailed, and any already stored are deleted. Legal endings like Pvt Ltd are ignored when matching.</p></div></div>
+          <div class="card-body">
+            <form class="inline" data-table="blocked_companies">
+              <label class="sr-only" for="b-name">Company name</label>
+              <input id="b-name" name="name" placeholder="e.g. Nexal IIT" required maxlength="100">
+              <button class="btn" type="submit">Block</button>
+            </form>
+            <p class="msg" data-msg="blocked_companies" role="status"></p>
+          </div>
+          <div class="table-wrap"><table data-list="blocked_companies"></table></div>
+          <div class="pager" data-pager="blocked_companies"></div>
+        </div>
+      </section>
+
+      <section class="view" data-view="settings">
+        <div class="card">
+          <div class="card-head"><div><h2>Pipeline settings<span class="total" data-total="settings"></span></h2><p>These override config.py on the next run without redeploying. Reset goes back to the default.</p></div></div>
+          <div class="card-body"><p class="msg" data-msg="settings" role="status"></p></div>
+          <div class="table-wrap"><table class="cfg" data-settings></table></div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<script>
+const BOARD_URLS = {
+  greenhouse: s => `https://boards.greenhouse.io/${s}`,
+  lever: s => `https://jobs.lever.co/${s}`,
+  ashby: s => `https://jobs.ashbyhq.com/${s}`,
+  workday: s => { const [host, site] = s.split("/"); return `https://${host}.myworkdayjobs.com/${site}`; },
+};
+const VIEWS = {
+  recipients: { cols: ["email", "added_at"], key: ["email"], nav: "recipients" },
+  companies: { cols: ["name", "portal", "slug", "links"], key: ["portal", "slug"], nav: "companies" },
+  search_queries: { cols: ["query", "added_at"], key: ["query"], nav: "queries" },
+  blocked_companies: { cols: ["name", "added_at"], key: ["name"], nav: "blocklist", remove: "Unblock" },
+};
+const VIEW_TABLE = { recipients: "recipients", companies: "companies", queries: "search_queries", blocklist: "blocked_companies", jobs: "jobs" };
+const TITLES = { overview: "Overview", jobs: "Jobs", recipients: "Email recipients", companies: "Company job boards", queries: "Search queries", blocklist: "Company blocklist", settings: "Settings" };
+const SETTING_LABELS = {
+  LOCATION: ["Location", "Used for LinkedIn and Indeed searches."],
+  HOURS_OLD: ["Posted within (hours)", "How far back searches look. 1 to 168."],
+  MIN_SCORE_TO_NOTIFY: ["Minimum score to email", "Gemini score from 1 to 10."],
+  LINKEDIN_UNDER_10_APPLICANTS: ["Under 10 applicants only", "LinkedIn's early-applicant filter. Turn off for more results."],
+  LINKEDIN_EXPERIENCE_LEVELS: ["Experience levels", "Comma-separated: 1 Internship, 2 Entry level, 3 Associate, 4 Mid-Senior."],
+  LINKEDIN_REQUEST_DELAY: ["Seconds between requests", "Higher is slower but triggers fewer rate limits. 0 to 30."],
+  ATS_HOURS_OLD: ["Board jobs posted within (hours)", "Only jobs first published inside this window are kept. 1 to 720."],
+  ATS_TITLE_KEYWORDS: ["Title must contain one of", "Comma-separated. Matches the start of a word, so engineer also matches engineering."],
+  ATS_EXCLUDE_TITLE_KEYWORDS: ["Skip titles containing", "Comma-separated, same matching. Use it to drop senior roles."],
+  ATS_LOCATION_KEYWORDS: ["Location must contain one of", "Comma-separated. Leave empty to accept any location."],
+};
+const SETTING_GROUPS = [
+  ["Search and email", ["LOCATION", "HOURS_OLD", "MIN_SCORE_TO_NOTIFY"]],
+  ["LinkedIn", ["LINKEDIN_UNDER_10_APPLICANTS", "LINKEDIN_EXPERIENCE_LEVELS", "LINKEDIN_REQUEST_DELAY"]],
+  ["Company job boards (Greenhouse, Lever, Ashby, Workday)", ["ATS_HOURS_OLD", "ATS_TITLE_KEYWORDS", "ATS_EXCLUDE_TITLE_KEYWORDS", "ATS_LOCATION_KEYWORDS"]],
+];
+const paging = { jobs: { page: 1, size: 20 }, recipients: { page: 1, size: 20 }, companies: { page: 1, size: 20 }, search_queries: { page: 1, size: 20 }, blocked_companies: { page: 1, size: 20 } };
+let minScore = 6;
+
+function el(tag, text, cls) {
+  const n = document.createElement(tag);
+  if (text !== undefined && text !== null) n.textContent = text;
+  if (cls) n.className = cls;
+  return n;
+}
+function link(href, text) {
+  const a = el("a", text);
+  a.href = href; a.target = "_blank"; a.rel = "noopener";
+  return a;
+}
+function setMsg(table, text, isError) {
+  const m = document.querySelector(`[data-msg="${table}"]`);
+  m.textContent = text;
+  m.className = "msg" + (isError ? " error" : "");
+}
+async function api(method, path, body) {
+  const res = await fetch(`/api/${path}`, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (method !== "GET") pageCache.clear();  // an edit makes every cached page stale
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+// Pages already fetched (or being fetched) by URL. The next page is prefetched, so Next feels instant.
+const pageCache = new Map();
+const PAGE_CACHE_MS = 60_000;
+function cachedGet(path) {
+  const hit = pageCache.get(path);
+  if (hit && Date.now() - hit.time < PAGE_CACHE_MS) return hit.promise;
+  const promise = api("GET", path);
+  pageCache.set(path, { time: Date.now(), promise });
+  promise.catch(() => pageCache.delete(path));  // never keep a failure
+  return promise;
+}
+const prefetch = path => cachedGet(path).catch(() => {});
+const loadSeq = {};  // newest request per list, so a slow older response can't overwrite a newer page
+const scrollToTop = () => window.scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+const fmtDate = iso => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return isNaN(d) ? String(iso).slice(0, 10) : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+};
+const ago = iso => {
+  const mins = Math.round((Date.now() - new Date(iso)) / 60000);
+  if (!isFinite(mins)) return "";
+  if (mins < 60) return `${mins} min ago`;
+  if (mins < 48 * 60) return `${Math.round(mins / 60)} h ago`;
+  return `${Math.round(mins / 1440)} days ago`;
+};
+const num = c => `${c.n.toLocaleString()}${c.capped ? "+" : ""}`;  // {n, capped} -> "1,000+"
+const isEarly = j => j.applicants != null && j.applicants <= 25;
+const rowNumber = (table, i) => (paging[table].page - 1) * paging[table].size + i + 1;
+
+function emptyRow(table, text, cols) {
+  const td = el("td", text, "empty");
+  td.colSpan = cols;
+  const tr = el("tr");
+  tr.append(td);
+  table.append(tr);
+}
+function headerRow(labels) {
+  const tr = el("tr");
+  labels.forEach((h, i) => tr.append(el("th", h, i === 0 ? "n" : "")));
+  return tr;
+}
+
+// ── Pager ─────────────────────────────────────────────────────────────
+function renderPager(table, data, reload) {
+  const box = document.querySelector(`[data-pager="${table}"]`);
+  box.replaceChildren();
+  if (!data.total) return;
+  const from = (data.page - 1) * data.size + 1;
+  const to = from + data.items.length - 1;
+  const info = el("span", `${from.toLocaleString()}–${to.toLocaleString()} of ${num({ n: data.total, capped: data.capped })}`);
+  const prev = el("button", "Previous", "btn secondary");
+  const next = el("button", "Next", "btn secondary");
+  prev.type = next.type = "button";
+  prev.disabled = data.page <= 1;
+  next.disabled = !data.has_more;
+  const go = async step => { paging[table].page += step; await reload(); scrollToTop(); };
+  prev.addEventListener("click", () => go(-1));
+  next.addEventListener("click", () => go(1));
+  const size = el("select");
+  size.setAttribute("aria-label", "Rows per page");
+  [20, 50, 100].forEach(n => size.append(new Option(`${n} per page`, n)));
+  size.value = data.size;
+  size.addEventListener("change", async () => { paging[table].size = Number(size.value); paging[table].page = 1; await reload(); scrollToTop(); });
+  const pages = Math.max(1, Math.ceil(data.total / data.size));
+  const where = el("span", `Page ${data.page} / ${pages.toLocaleString()}${data.capped ? "+" : ""}`, "page-of");
+  where.setAttribute("aria-live", "polite");
+  const controls = el("div", null, "controls");
+  controls.append(size, prev, where, next);
+  box.append(info, controls);
+}
+function setTotal(table, data) {
+  const t = document.querySelector(`[data-total="${table}"]`);
+  if (t) t.textContent = `${num({ n: data.total, capped: data.capped })} total`;
+}
+
+// ── Navigation ────────────────────────────────────────────────────────
+function show(view, fetchData = true) {
+  if (!TITLES[view]) view = "overview";
+  document.querySelectorAll(".view").forEach(v => v.classList.toggle("active", v.dataset.view === view));
+  document.querySelectorAll(".nav a").forEach(a => a.classList.toggle("active", a.dataset.view === view));
+  document.getElementById("view-title").textContent = TITLES[view];
+  if (!fetchData) return;
+  if (view === "overview") loadOverview();
+  if (view === "jobs") loadJobsPage();
+  if (VIEW_TABLE[view] && VIEWS[VIEW_TABLE[view]]) load(VIEW_TABLE[view]);
+  if (view === "settings") loadSettings();
+}
+window.addEventListener("hashchange", () => show(location.hash.slice(1)));
+
+// ── Jobs ──────────────────────────────────────────────────────────────
+function scoreBadge(score) {
+  const cls = score >= 8 ? "good" : score >= minScore ? "warn" : "low";
+  const b = el("span", score, `badge ${cls}`);
+  b.title = score >= 8 ? "Strong match" : score >= minScore ? "Worth applying" : "Below email threshold";
+  return b;
+}
+function jobRow(j, n) {
+  const tr = el("tr");
+  tr.append(el("td", n, "n"));
+  const sc = el("td");
+  sc.append(scoreBadge(j.score || 0));
+  tr.append(sc);
+  const t = el("td");
+  const a = link(j._id, j.title || "(untitled)");
+  a.className = "title";
+  const meta = el("div", [j.company, j.location].filter(Boolean).join(" · "), "sub");
+  if (j.company) meta.append(blockButton(j.company));
+  t.append(a, meta);
+  tr.append(t);
+  const site = el("td");
+  site.append(el("span", j.site || "", "pill"));
+  tr.append(site);
+  const ap = el("td");
+  if (j.applicants_text) ap.append(el("span", j.applicants_text.replace("Be among the first", "First"), isEarly(j) ? "pill early" : "pill"));
+  else ap.append(el("span", "—", "sub"));
+  tr.append(ap);
+  const p = el("td");
+  if (j.poster_name && j.poster_url) p.append(link(j.poster_url, j.poster_name));
+  else p.append(el("span", "—", "sub"));
+  tr.append(p);
+  const d = el("td", (j.date_posted || "").slice(0, 10));
+  d.append(el("div", j.scraped_at ? `scraped ${ago(j.scraped_at)}` : "", "sub"));
+  tr.append(d);
+  return tr;
+}
+// Two clicks (no dialog): the first arms the button, the second blocks the company.
+function blockButton(company) {
+  const b = el("button", "Block", "btn ghost small");
+  b.type = "button";
+  b.title = `Add ${company} to the blocklist`;
+  b.setAttribute("aria-label", `Block ${company}`);
+  let timer;
+  b.addEventListener("click", async () => {
+    if (!b.classList.contains("armed")) {
+      b.classList.add("armed");
+      b.textContent = "Click again to block";
+      timer = setTimeout(() => { b.classList.remove("armed"); b.textContent = "Block"; }, 4000);
+      return;
+    }
+    clearTimeout(timer);
+    b.disabled = true;
+    try {
+      const r = await api("POST", "blocked_companies", { name: company });
+      await loadOverview(true);
+      document.getElementById("last-run").textContent = `Blocked ${company}. Deleted ${r.purged} stored jobs.`;
+      if ((location.hash.slice(1) || "overview") === "jobs") loadJobsPage();
+    } catch (e) {
+      b.disabled = false;
+      document.getElementById("last-run").textContent = e.message;
+    }
+  });
+  return b;
+}
+const JOB_HEADERS = ["#", "Score", "Job", "Source", "Applicants", "Posted by", "Posted"];
+
+// URL of one page of a list, with the jobs filters currently on screen.
+function pageUrl(table, page) {
+  const size = paging[table].size;
+  if (table !== "jobs") return `${table}?page=${page}&size=${size}`;
+  return `jobs?${new URLSearchParams({
+    page, size,
+    q: document.getElementById("f-search").value.trim(),
+    site: document.getElementById("f-site").value,
+    min: document.getElementById("f-score").value,
+    sort: document.getElementById("f-sort").value,
+    early: document.getElementById("f-early").checked ? "1" : "0",
+  })}`;
+}
+async function loadJobsPage() {
+  const s = paging.jobs;
+  const seq = loadSeq.jobs = (loadSeq.jobs || 0) + 1;
+  const table = document.getElementById("jobs-table");
+  table.parentElement.classList.add("loading");
+  let data;
+  try { data = await cachedGet(pageUrl("jobs", s.page)); } catch (e) { table.parentElement.classList.remove("loading"); document.getElementById("jobs-count").textContent = e.message; return; }
+  if (seq !== loadSeq.jobs) return;
+  table.parentElement.classList.remove("loading");
+  if (!data.items.length && s.page > 1) { s.page -= 1; return loadJobsPage(); }
+  if (data.has_more) prefetch(pageUrl("jobs", s.page + 1));
+  table.replaceChildren(headerRow(JOB_HEADERS));
+  if (!data.items.length) emptyRow(table, "No jobs match these filters.", JOB_HEADERS.length);
+  data.items.forEach((j, i) => table.append(jobRow(j, rowNumber("jobs", i))));
+  setTotal("jobs", data);
+  document.getElementById("jobs-count").textContent = `Showing ${data.items.length} on this page`;
+  renderPager("jobs", data, loadJobsPage);
+}
+let searchTimer;
+function jobFilterChanged(delay = 0) {
+  paging.jobs.page = 1;
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(loadJobsPage, delay);
+}
+document.getElementById("f-search").addEventListener("input", () => jobFilterChanged(350));
+["f-site", "f-score", "f-sort", "f-early"].forEach(id => document.getElementById(id).addEventListener("change", () => jobFilterChanged()));
+
+// ── Overview ──────────────────────────────────────────────────────────
+function kpi(label, value, sub) {
+  const k = el("div", null, "kpi");
+  k.append(el("div", label, "label"), el("div", value, "value"), el("div", sub || "", "sub"));
+  return k;
+}
+async function loadOverview(fresh = false) {
+  let o;
+  try { o = await api("GET", `overview${fresh ? "?fresh=1" : ""}`); } catch (e) { document.getElementById("last-run").textContent = e.message; return; }
+  minScore = o.min_score;
+  const c = o.counts;
+  document.getElementById("kpis").replaceChildren(
+    kpi("Jobs tracked", num(c.jobs), "all runs"),
+    kpi("Scraped last 24 h", num(c.last_24h), "newest run included"),
+    kpi("Worth applying", num(c.worth_applying), `score ${minScore} or more`),
+    kpi("Early applicant", num(c.early), "25 applicants or fewer"),
+    kpi("Recipients", num(c.recipients), "get the digest"),
+  );
+  for (const [key, count] of Object.entries(c)) {
+    const badge = document.querySelector(`[data-nav-count="${key}"]`);
+    if (badge) badge.textContent = num(count);
+  }
+  document.getElementById("last-run").textContent = o.last_run ? `Last run ${fmtDate(o.last_run)} (${ago(o.last_run)})` : "No runs recorded yet";
+
+  const top = document.getElementById("top-jobs");
+  top.replaceChildren(headerRow(JOB_HEADERS));
+  if (!o.top.length) emptyRow(top, "No jobs yet.", JOB_HEADERS.length);
+  o.top.forEach((j, i) => top.append(jobRow(j, i + 1)));
+
+  const list = document.getElementById("by-source");
+  list.replaceChildren();
+  Object.entries(o.by_site).sort((a, b) => b[1].n - a[1].n).forEach(([site, count]) => {
+    const li = el("li");
+    li.append(el("span", site, "pill"), el("strong", num(count)));
+    list.append(li);
+  });
+  if (!o.sites.length) list.append(el("li", "Nothing yet.", "sub"));
+
+  const siteSel = document.getElementById("f-site");
+  const keep = siteSel.value;
+  siteSel.replaceChildren(new Option("All sources", ""));
+  o.sites.forEach(site => siteSel.append(new Option(site, site)));
+  siteSel.value = keep;
+}
+document.getElementById("refresh").addEventListener("click", async () => {
+  pageCache.clear();
+  await loadOverview(true);
+  const view = location.hash.slice(1) || "overview";
+  show(view);
+});
+
+// ── Admin tables ──────────────────────────────────────────────────────
+function cell(table, row, col) {
+  const td = el("td");
+  if (table === "companies" && col === "links") {
+    const bu = BOARD_URLS[row.portal];
+    if (bu) td.append(link(bu(row.slug), "Job board"));
+    if (row.careers_url) { td.append(" · "); td.append(link(row.careers_url, "Careers page")); }
+  } else if (col === "added_at") {
+    td.textContent = fmtDate(row[col]);
+    td.className = "sub";
+  } else {
+    td.textContent = row[col] || "";
+  }
+  return td;
+}
+async function load(table) {
+  const view = VIEWS[table];
+  const s = paging[table];
+  const target = document.querySelector(`[data-list="${table}"]`);
+  const seq = loadSeq[table] = (loadSeq[table] || 0) + 1;
+  target.parentElement.classList.add("loading");
+  let data;
+  try { data = await cachedGet(pageUrl(table, s.page)); } catch (e) { target.parentElement.classList.remove("loading"); setMsg(table, e.message, true); return; }
+  if (seq !== loadSeq[table]) return;
+  target.parentElement.classList.remove("loading");
+  if (!data.items.length && s.page > 1) { s.page -= 1; return load(table); }
+  if (data.has_more) prefetch(pageUrl(table, s.page + 1));
+  setTotal(table, data);
+  const badge = document.querySelector(`[data-nav-count="${view.nav}"]`);
+  if (badge) badge.textContent = num({ n: data.total, capped: data.capped });
+  target.replaceChildren();
+  if (!data.items.length) { emptyRow(target, "Nothing added yet.", view.cols.length + 2); renderPager(table, data, () => load(table)); return; }
+  const head = headerRow(["#", ...view.cols.map(c => c.replace("_", " "))]);
+  head.append(el("th"));
+  target.append(head);
+  data.items.forEach((row, i) => {
+    const tr = el("tr");
+    tr.append(el("td", rowNumber(table, i), "n"));
+    view.cols.forEach(c => tr.append(cell(table, row, c)));
+    const td = el("td");
+    td.style.textAlign = "right";
+    const btn = el("button", view.remove || "Remove", "btn ghost");
+    btn.type = "button";
+    btn.setAttribute("aria-label", `${view.remove || "Remove"} ${view.key.map(k => row[k]).join(" ")}`);
+    btn.addEventListener("click", async () => {
+      try {
+        await api("DELETE", table, Object.fromEntries(view.key.map(k => [k, row[k]])));
+        setMsg(table, view.remove ? "Unblocked. New jobs from this company will be processed again." : "Removed.");
+        load(table);
+      } catch (e) { setMsg(table, e.message, true); }
+    });
+    td.append(btn);
+    tr.append(td);
+    target.append(tr);
+  });
+  renderPager(table, data, () => load(table));
+}
+document.querySelectorAll("form[data-table]").forEach(form => {
+  form.addEventListener("submit", async ev => {
+    ev.preventDefault();
+    const table = form.dataset.table;
+    const button = form.querySelector("button");
+    button.disabled = true;
+    setMsg(table, table === "companies" ? "Checking board..." : "Saving...");
+    try {
+      const r = await api("POST", table, Object.fromEntries(new FormData(form)));
+      form.reset();
+      setMsg(table, r.purged === undefined ? "Saved." : `Blocked. Deleted ${r.purged} stored jobs from this company.`);
+      load(table);
+      if (r.purged !== undefined) loadOverview(true);
+    } catch (e) {
+      setMsg(table, e.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  });
+});
+
+// ── Settings ──────────────────────────────────────────────────────────
+async function saveSetting(method, body, done, note) {
+  note.className = "field-msg";
+  note.textContent = method === "POST" ? "Saving..." : "Resetting...";
+  try {
+    await api(method, "settings", body);
+    setMsg("settings", done);
+    await loadSettings();
+    loadOverview(true);
+  } catch (e) {
+    note.className = "field-msg error";
+    note.textContent = e.message;
+  }
+}
+function settingRow(row, n) {
+  const [label, hint] = SETTING_LABELS[row.name] || [row.name, ""];
+  const tr = el("tr");
+  tr.append(el("td", n, "n"));
+  const name = el("td");
+  name.append(el("div", label, "name"), el("div", hint, "hint"));
+  tr.append(name);
+
+  let input;
+  if (row.kind === "bool") {
+    input = el("select");
+    input.append(new Option("On", "true"), new Option("Off", "false"));
+  } else if (row.kind === "list") {
+    input = el("textarea");
+    input.spellcheck = false;
+  } else {
+    input = el("input");
+  }
+  input.value = row.value;
+  input.setAttribute("aria-label", label);
+  const note = el("div", "", "field-msg");
+  const value = el("td");
+  value.append(input, note);
+  tr.append(value);
+
+  const status = el("td");
+  status.append(el("span", row.custom ? "Custom" : "Default", row.custom ? "pill" : "pill muted"));
+  if (row.custom) status.append(el("div", `Default: ${row.default || "empty"}`, "hint"));
+  tr.append(status);
+
+  const actions = el("td", null, "actions");
+  const save = el("button", "Save", "btn"); save.type = "button";
+  const reset = el("button", "Reset", "btn ghost"); reset.type = "button"; reset.disabled = !row.custom;
+  save.addEventListener("click", () => saveSetting("POST", { name: row.name, value: input.value }, `${label} saved.`, note));
+  reset.addEventListener("click", () => saveSetting("DELETE", { name: row.name }, `${label} reset to default.`, note));
+  if (row.kind === "text") input.addEventListener("keydown", ev => { if (ev.key === "Enter") save.click(); });
+  actions.append(save, reset);
+  tr.append(actions);
+  return tr;
+}
+async function loadSettings() {
+  const table = document.querySelector("[data-settings]");
+  let rows;
+  try { rows = await api("GET", "settings"); } catch (e) { setMsg("settings", e.message, true); return; }
+  const byName = Object.fromEntries(rows.map(r => [r.name, r]));
+  table.replaceChildren(headerRow(["#", "Setting", "Value", "Status", ""]));
+  let n = 0;
+  for (const [group, names] of SETTING_GROUPS) {
+    const head = el("tr", null, "group");
+    const td = el("td", group);
+    td.colSpan = 5;
+    head.append(td);
+    table.append(head);
+    names.filter(name => byName[name]).forEach(name => table.append(settingRow(byName[name], ++n)));
+  }
+  document.querySelector('[data-total="settings"]').textContent = `${n} settings, ${rows.filter(r => r.custom).length} customized`;
+}
+
+// ── Start ─────────────────────────────────────────────────────────────
+// The overview always loads (nav counts); only the visible view fetches its own page.
+const startView = location.hash.slice(1) || "overview";
+show(startView, startView !== "overview");
+loadOverview();
+</script>
+</body>
+</html>
